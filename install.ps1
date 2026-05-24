@@ -1,4 +1,4 @@
-<#
+﻿<#
   飞书 CC Bot - Windows 一键安装脚本
   自动安装: Node.js / Git / Claude Code CLI / lark-cli / playwright-cli / lark-channel-bridge / AI Skills
 
@@ -12,6 +12,11 @@
 
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
+
+# 修复 PowerShell 中文乱码问题
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 >$null
 
 # ============================================================
 # 自动提权：如果未以管理员身份运行，自动申请管理员权限
@@ -38,7 +43,7 @@ $LogFile = Join-Path $env:TEMP "feishu-cc-bot-install-$(Get-Date -Format 'yyyyMM
 function Write-Step {
     param([string]$Message)
     $timestamp = Get-Date -Format "HH:mm:ss"
-    $line = "`n[$timestamp] >>> $Message"
+    $line = "`n[$timestamp] --- $Message"
     Write-Host $line -ForegroundColor Cyan
     Add-Content -Path $LogFile -Value $line
 }
@@ -107,7 +112,7 @@ Add-Content -Path $LogFile -Value "=== 安装开始: $(Get-Date -Format 'yyyy-MM
 # ============================================================
 # 步骤 1: 检查系统环境
 # ============================================================
-Write-Step "[1/8] 检查系统环境..."
+Write-Step "[1/6] 检查系统环境..."
 
 $osInfo = Get-CimInstance -ClassName Win32_OperatingSystem
 $osVersion = [version]$osInfo.Version
@@ -135,7 +140,7 @@ if ($drive -and $drive.Free -lt 2GB) {
 # ============================================================
 # 步骤 2: 安装 Node.js
 # ============================================================
-Write-Step "[2/8] 安装 Node.js..."
+Write-Step "[2/6] 安装 Node.js..."
 
 $nodeInstalled = $false
 try {
@@ -184,16 +189,22 @@ if (-not $nodeInstalled) {
     }
 }
 
+if (-not $nodeInstalled) {
+    Write-Host "`nNode.js 安装失败，无法继续。请手动安装后重试：https://nodejs.org" -ForegroundColor Red
+    Read-Host "按回车退出"
+    exit 1
+}
+
 Refresh-Path
 
 # ============================================================
 # 步骤 3: 安装 Git
 # ============================================================
 if (Test-CommandInstalled "git") {
-    Write-Step "[3/8] 检查 Git..."
+    Write-Step "[3/6] 检查 Git..."
     Write-Success "Git 已安装: $(git --version)"
 } else {
-    Write-Step "[3/8] 安装 Git..."
+    Write-Step "[3/6] 安装 Git..."
     $wingetAvailable = try { winget --version 2>$null; $true } catch { $false }
     if ($wingetAvailable) {
         Write-Info "通过 winget 安装 Git..."
@@ -230,51 +241,53 @@ function Install-GlobalPackage {
     }
 }
 
-Write-Step "[4/8] 安装 Claude Code CLI..."
+Write-Step "[4/6] 安装 Claude Code CLI..."
 npm cache clean --force 2>$null | Out-Null
 $claudeOk = Install-GlobalPackage -PackageName "@anthropic-ai/claude-code" -DisplayName "Claude Code CLI"
-
-Write-Step "[5/8] 安装 lark-channel-bridge + lark-cli + playwright-cli..."
-$bridgeOk = Install-GlobalPackage -PackageName "lark-channel-bridge" -DisplayName "lark-channel-bridge"
-$larkOk   = Install-GlobalPackage -PackageName "@larksuite/cli" -DisplayName "lark-cli"
-$pwOk     = Install-GlobalPackage -PackageName "@playwright/cli" -DisplayName "playwright-cli"
+if (-not $claudeOk) {
+    Write-Host "`nClaude Code CLI 安装失败，无法继续。" -ForegroundColor Red
+    Read-Host "按回车退出"
+    exit 1
+}
 
 Refresh-Path
 
 # ============================================================
-# 步骤 6: 安装 Playwright 浏览器引擎
+# 步骤 5: 推荐手动安装的工具
 # ============================================================
-Write-Step "[6/8] 安装 Playwright 浏览器引擎..."
+Write-Step "[5/6] 推荐工具（建议手动安装）..."
 
-try {
-    $null = Get-Command "playwright" -ErrorAction Stop
-    Write-Info "正在下载 Chromium 浏览器（约 300MB，首次安装较慢）..."
-    playwright install chromium 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "Playwright Chromium 安装完成"
-    } else {
-        Write-Warn "Chromium 安装未完成，可稍后手动执行: playwright install chromium"
-    }
-} catch {
-    Write-Warn "playwright 命令不可用，跳过浏览器安装"
-}
+Write-Host @"
 
-# ============================================================
-# 步骤 7: 安装飞书 AI Skills
-# ============================================================
-Write-Step "[7/8] 安装飞书 AI Skills..."
+飞书机器人（二选一即可）：
 
-try {
-    npx skills add larksuite/cli -g -y 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        Write-Success "飞书 AI Skills 安装完成"
-        Write-Info "已安装: 日历 / 文档 / 表格 / 即时通讯 / 联系人 / 飞书妙记 / 白板 等"
-    } else {
-        Write-Warn "飞书 AI Skills 安装未完成，可稍后手动执行: npx skills add larksuite/cli -g -y"
-    }
-} catch {
-    Write-Warn "飞书 AI Skills 安装失败: $_"
-}
+  lark-channel-bridge（飞书 ↔ Claude Code 桥接）
+    官网: https://github.com/zarazhangrui/feishu-claude-code-bridge
+    安装: npm install -g lark-channel-bridge
+    启动: lark-channel-bridge run
+
+  metabot（通用 bot 框架）
+    官网: https://github.com/xvirobotics/metabot
+    安装: irm https://raw.githubusercontent.com/xvirobotics/metabot/main/install.ps1 | iex
+
+其他推荐工具：
+
+  lark-cli（飞书 CLI）
+    官网: https://www.feishu.cn/feishu-cli
+    安装: npx @larksuite/cli@latest install
+
+  playwright-cli（浏览器操作）
+    安装: npm install -g @playwright/cli
+    浏览器: playwright install chromium
+
+  飞书 AI Skills（日历/文档/表格/妙记等）
+    安装: npx @larksuite/cli skills install
+
+  cc-switch（模型切换）
+    官网: https://github.com/farion1231/cc-switch
+    安装: npm install -g cc-switch
+
+"@ -ForegroundColor White
 
 # ============================================================
 # 完成
@@ -282,55 +295,23 @@ try {
 $endTime = Get-Date
 $duration = ($endTime - $startTime).TotalMinutes.ToString("F1")
 
-Write-Step "[8/8] 安装完成！"
+Write-Step "[6/6] 安装完成！"
 Write-Host @"
 
 ============================================
-  所有工具安装完成！（耗时: ${duration}分钟）
+  所有核心组件安装成功！（耗时: ${duration}分钟）
   安装日志已保存至: $LogFile
 ============================================
 
 "@ -ForegroundColor Green
 
-Write-Host "接下来需要做两件事：" -ForegroundColor Yellow
+Write-Host "接下来需要做的事：" -ForegroundColor Yellow
 Write-Host ""
-
-if ($claudeOk) {
-    Write-Host "  ═══ 第一步：登录 Claude Code ═══" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  打开命令提示符，运行："
-    Write-Host "     claude login" -ForegroundColor White -BackgroundColor DarkBlue
-    Write-Host "  浏览器会打开，用 Anthropic 账号登录即可"
-    Write-Host ""
-}
-
-if ($larkOk) {
-    Write-Host "  ═══ 可选：登录 Lark CLI ═══" -ForegroundColor Cyan
-    Write-Host "  如果需要使用飞书 API（日历、文档等）："
-    Write-Host "     lark-cli auth login" -ForegroundColor White -BackgroundColor DarkBlue
-    Write-Host ""
-}
-
-Write-Host "  ═══ 第二步：启动飞书机器人 ═══" -ForegroundColor Cyan
+Write-Host "  1. 登录 Claude Code：" -ForegroundColor Cyan
+Write-Host "     claude login" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host ""
-Write-Host "  打开命令提示符，运行："
-$cmd = if ($bridgeOk) { "lark-channel-bridge run" } else { "npx lark-channel-bridge run" }
-Write-Host "     $cmd" -ForegroundColor White -BackgroundColor DarkBlue
-Write-Host "  首次运行会显示二维码，用飞书 App 扫码绑定即可"
+Write-Host "  2. 安装飞书机器人（见上方推荐），启动后扫码绑定" -ForegroundColor Cyan
 Write-Host ""
-
-Write-Host "  ═══ 常用命令（在飞书中发送） ═══" -ForegroundColor Cyan
-Write-Host "  /help           查看所有命令"
-Write-Host "  /status         查看当前状态"
-Write-Host "  /new            开始新对话"
-Write-Host "  /ws save <名字> 保存当前工作区"
-Write-Host ""
-
-Write-Host "  ═══ 后台运行（可选） ═══" -ForegroundColor Cyan
-Write-Host "  lark-channel-bridge start    启动后台服务"
-Write-Host "  lark-channel-bridge stop     关闭后台服务"
-Write-Host ""
-
 Write-Host "============================================" -ForegroundColor Magenta
 Write-Host "  如遇问题，查看安装日志："
 Write-Host "  $LogFile"
