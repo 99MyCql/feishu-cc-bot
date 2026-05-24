@@ -197,6 +197,11 @@ if (-not $nodeInstalled) {
 
 Refresh-Path
 
+# 换淘宝源（加速国内下载）
+Write-Info "配置 npm 镜像源: https://registry.npmmirror.com"
+npm config set registry https://registry.npmmirror.com 2>&1 | Out-Null
+Write-Success "npm 镜像源已配置"
+
 # ============================================================
 # 步骤 3: 安装 Git
 # ============================================================
@@ -213,7 +218,10 @@ if (Test-CommandInstalled "git") {
     if (Test-CommandInstalled "git") {
         Write-Success "Git 安装完成: $(git --version)"
     } else {
-        Write-Warn "Git 未自动安装，不影响核心功能，可跳过"
+        Write-Host "`nGit 安装失败，无法继续。" -ForegroundColor Red
+        Write-Host "请手动安装: https://git-scm.com" -ForegroundColor White
+        Read-Host "按回车退出"
+        exit 1
     }
 }
 
@@ -253,18 +261,35 @@ if (-not $claudeOk) {
 Refresh-Path
 
 # ============================================================
-# 步骤 5: 推荐手动安装的工具
+# 步骤 5: 安装 lark-channel-bridge（Windows 兼容版）
 # ============================================================
-Write-Step "[5/6] 推荐工具（建议手动安装）..."
+Write-Step "[5/6] 安装飞书桥接服务..."
+Refresh-Path
+
+$bridgeInstalled = npm list -g --depth=0 2>$null | Select-String "lark-channel-bridge@" -SimpleMatch
+if ($bridgeInstalled) {
+    $ver = ($bridgeInstalled -split '@')[-1].Trim()
+    Write-Success "lark-channel-bridge 已安装: v$ver"
+} else {
+    Write-Info "正在安装 lark-channel-bridge (Windows 兼容版)..."
+    $bridgeUrl = "https://github.com/99MyCql/feishu-claude-code-bridge/releases/download/1.0.0/lark-channel-bridge-0.1.32.tgz"
+    # --ignore-scripts 跳过 prepare，tarball 已包含预编译的 dist/
+    npm install -g --ignore-scripts $bridgeUrl 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "lark-channel-bridge 安装完成"
+    } else {
+        Write-Warn "lark-channel-bridge 安装失败，可稍后手动安装"
+    }
+}
+
+# ============================================================
+# 步骤 6: 推荐手动安装的工具
+# ============================================================
+Write-Step "[6/6] 推荐工具（建议手动安装）..."
 
 Write-Host @"
 
-飞书机器人（二选一即可）：
-
-  lark-channel-bridge（飞书 ↔ Claude Code 桥接）
-    官网: https://github.com/zarazhangrui/feishu-claude-code-bridge
-    安装: npm install -g lark-channel-bridge
-    启动: lark-channel-bridge run
+飞书机器人备选：
 
   metabot（通用 bot 框架）
     官网: https://github.com/xvirobotics/metabot
@@ -295,7 +320,7 @@ Write-Host @"
 $endTime = Get-Date
 $duration = ($endTime - $startTime).TotalMinutes.ToString("F1")
 
-Write-Step "[6/6] 安装完成！"
+Write-Step "安装完成！"
 Write-Host @"
 
 ============================================
@@ -310,7 +335,12 @@ Write-Host ""
 Write-Host "  1. 登录 Claude Code：" -ForegroundColor Cyan
 Write-Host "     claude login" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host ""
-Write-Host "  2. 安装飞书机器人（见上方推荐），启动后扫码绑定" -ForegroundColor Cyan
+Write-Host "  2. 配置并绑定你的飞书 bot：" -ForegroundColor Cyan
+Write-Host "     lark-channel-bridge run" -ForegroundColor White -BackgroundColor DarkBlue
+Write-Host ""
+Write-Host "  3. 配置完成后，注册为后台服务（开机自启）：" -ForegroundColor Cyan
+Write-Host "     右键终端 → 以管理员身份运行" -ForegroundColor Yellow
+Write-Host "     lark-channel-bridge start" -ForegroundColor White -BackgroundColor DarkBlue
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Magenta
 Write-Host "  如遇问题，查看安装日志："
